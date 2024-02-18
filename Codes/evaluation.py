@@ -4,7 +4,7 @@ import torch.nn as nn
 
 config = {
     'nSub': 1,
-    'model_pth': './result_models/model_sub1.pth'
+    'model_pth': 'Models/lyh_dataset/model_sub1.pth'
 }
 
 

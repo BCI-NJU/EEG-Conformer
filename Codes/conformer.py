@@ -24,9 +24,8 @@ import json
 from ExP import ExP
 
 config = {
-    'res_path': './results/sub_result.txt',
-    'sub_res_path': "./results/log_subject%d.txt",
-    
+    'res_path': None,
+
     # model config
     'emb_size': 40,
     'encoder_depth': 6,
@@ -55,7 +54,7 @@ config = {
     'drop_p_2': 0.3,
     
     # training config (adam)
-    'batch_size': 72,
+    'batch_size': 60, # as we have 300 samples per task
     'n_epochs': 800,
     'lr': 0.001,
     'b1': 0.9,
@@ -67,19 +66,23 @@ config = {
 def main():
     best = 0
     aver = 0
-    
+
+    trial_time = str(datetime.datetime.now())
+    config['res_path'] = os.path.join("./Results", trial_time)
+
     res_path = config["res_path"]
-    dir_name = os.path.dirname(res_path)
+    dir_name = os.path.join(os.path.dirname(res_path), trial_time)
+    print(f"result will be saved in {dir_name}")
     if not os.path.exists(dir_name):
         os.makedirs(dir_name)
 
-    result_write = open(res_path, "w")
+    result_write = open(os.path.join(res_path, 'log.txt'), "w")
     result_write.write('config: \n')
     result_write.write(json.dumps(config, indent=4))
     result_write.write("\n\n")
     print(config)
     
-    for i in range(9):
+    for i in range(1):
         starttime = datetime.datetime.now()
 
 

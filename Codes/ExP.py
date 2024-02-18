@@ -12,6 +12,8 @@ from torch.autograd import Variable
 from models import Conformer
 from torch.backends import cudnn
 from torchsummary import summary
+from sklearn.model_selection import train_test_split
+from matplotlib import pyplot as plt
 
 import scipy.io
 import sys
@@ -23,33 +25,36 @@ os.environ["CUDA_VISIBLE_DEVICES"] = ','.join(map(str, gpus)) # choose GPUs
 class ExP():
     def __init__(self, nsub, config=None):
         super(ExP, self).__init__()
-        self.batch_size = 72
-        self.n_epochs = 500
-        self.lr = 0.0002
-        self.b1 = 0.5
-        self.b2 = 0.999
-        self.nSub = nsub
+        if config is None:
+            print("no customized config, using default config")
+            self.batch_size = 72
+            self.n_epochs = 500
+            self.lr = 0.0002
+            self.b1 = 0.5
+            self.b2 = 0.999
+            self.nSub = nsub
+        else:
+            self.batch_size=config['batch_size']
+            self.n_epochs=config['n_epochs']
+            self.lr=config['lr']
+            self.b1=config['b1']
+            self.b2=config['b2']
+            self.nSub=nsub
+
 
         self.start_epoch = 0
-        # self.root = '/Data/strict_TE/'
-        self.root = './data/rawMat/'
-        res_path = "./results/log_subject%d.txt" % self.nSub
+        self.root = './Datasets/lyh_dataset'
+        # res_path = "./Results/log_subject%d.txt" % self.nSub
         
-        self.config = None
         self.config = config
         if self.config != None:
-            self.batch_size = config["batch_size"]
-            self.n_epochs = config["n_epochs"]
-            self.lr = config["lr"]
-            self.b1 = config["b1"]
-            self.b2 = config["b2"]
-            res_path = config["sub_res_path"] % self.nSub
+            res_path = config["res_path"]
         
         dir_name = os.path.dirname(res_path)
         if not os.path.exists(dir_name):
             os.makedirs(dir_name)
-        result_write = open(res_path, "w")
-        self.log_write = open(res_path, "w")
+        result_write = open(os.path.join(res_path, "exp_log.txt"), "w")
+        self.log_write = open(os.path.join(res_path, "exp_log.txt"), "w")
 
         self.Tensor = torch.cuda.FloatTensor
         self.LongTensor = torch.cuda.LongTensor
@@ -61,7 +66,7 @@ class ExP():
         self.model = Conformer(config=self.config).cuda()
         self.model = nn.DataParallel(self.model, device_ids=[i for i in range(len(gpus))])
         self.model = self.model.cuda()
-        summary(self.model, (1, 22, 1000))
+        summary(self.model, (1, 14, 1000))
         
 #         with open('summary.txt', 'w') as f:
 #             original_stdout = sys.stdout 
@@ -86,7 +91,7 @@ class ExP():
             # print(label.shape) # (288, 1)
             # print(tmp_label.shape) # (72,)
 
-            tmp_aug_data = np.zeros((int(self.batch_size / 4), 1, 22, 1000))
+            tmp_aug_data = np.zeros((int(self.batch_size / 4), 1, 14, 1000))
             # print(f"tmp_aug_data.shape = {tmp_aug_data.shape}")
             # drf: get 8 slices of 8 random data from tmp_data, from the same time period idx
             for ri in range(int(self.batch_size / 4)):
@@ -112,65 +117,81 @@ class ExP():
         return aug_data, aug_label
 
     def get_test_data(self):
-        test_tmp = scipy.io.loadmat(self.root + 'se00%d.mat' % self.nSub)
-        test_data = test_tmp['x']
-        test_label = test_tmp['y']
+        """
+        This function is used for testing the model's performance
+        will load the test_set.mat files 
+        Returns:
+        (X_test, y_test)
+        """
 
-        test_data = np.transpose(test_data, (2, 0, 1))
-        test_data = np.expand_dims(test_data, axis=1)
-        test_label = np.transpose(test_label)
+        test_set = scipy.io.loadmat('Datasets/lyh_dataset/test_set.mat')
 
-        testData = test_data
-        testLabel = test_label.squeeze()
+        X_test = test_set['X_test']
+        y_test = test_set['y_test']
 
-        return testData, testLabel
+
+        return X_test, y_test 
     
     def get_source_data(self):
+        """
+        This function is used to make train set and test set from four raw EEG data in .npy format.
+        Also, the (X_test, y_test) will be saved in .mat format for future evaluations.
+        Returns:
+        (X_train, y_train, X_test, y_test)
 
-        # train data
-        # self.total_data = scipy.io.loadmat(self.root + 'A0%dT.mat' % self.nSub)
-        # self.train_data = self.total_data['data']
-        # self.train_label = self.total_data['label']
+        """
 
-        self.total_data = scipy.io.loadmat(self.root + 's00%d.mat' % self.nSub)
-        self.train_data = self.total_data['x'] # (22, 1000, 288)
-        self.train_label = self.total_data['y'] # (1, 288)
+        # get all the data first
+        cur_path = os.getcwd()
+        print(cur_path)
+        left_raw = np.load('Datasets/lyh_dataset/left_processed.npy') # label: 0
+        right_raw = np.load('Datasets/lyh_dataset/right_processed.npy') # label: 1
+        leg_raw = np.load('Datasets/lyh_dataset/left_processed.npy') # label: 2
+        nothing_raw = np.load('Datasets/lyh_dataset/nothing_processed.npy') # label: 3
+        eeg_raw = [left_raw, right_raw, leg_raw, nothing_raw]
 
-        self.train_data = np.transpose(self.train_data, (2, 0, 1)) # (288, 22, 1000)
-        self.train_data = np.expand_dims(self.train_data, axis=1) # (288, 1, 22, 1000)
-        self.train_label = np.transpose(self.train_label) # (288, 1)
+        X_tot = []
+        y_tot = []
+
+        for i in range(4):
+            tmp = eeg_raw[i].reshape(15, 300, -1) # (15, 30_0000) => (15, 300, 1000)
+            tmp = tmp[:14, :, :] # filter the channels, only need the first 14 channels
+            X_raw = tmp.transpose((1, 0, 2)) # (14, 300, 1000) => (300, 14, 1000)
+            y_raw = np.array([i for j in range(300)]) # (300,) value = label
+            X_tot.append(X_raw)
+            y_tot.append(y_raw)
+
+        X_tot = np.concatenate(X_tot)
+        y_tot = np.concatenate(y_tot)
+
+        # print(X_tot.shape, y_tot.shape) # (1200, 14, 1000), (1200,)
+    
+
+        self.train_data = X_tot # (1200, 14, 1000)
+        self.train_data = np.expand_dims(self.train_data, axis=1) # (1200, 1, 14, 1000)
+        self.train_label = y_tot.reshape(1200, 1) # (1200, 1)
         
-        # smaller time span
-        # self.train_data = self.train_data.reshape((288*4, 1, 22, 250))
-        # self.train_label = np.repeat(self.train_label, 4, axis=0)
-        
-        self.allData = self.train_data
-        self.allLabel = self.train_label.squeeze()
+        self.allData = self.train_data # (1200, 1, 14, 1000)
+        self.allLabel = self.train_label.squeeze() # (1200, )
 
         shuffle_num = np.random.permutation(len(self.allData))
         # print(f"Shuffle num {shuffle_num}")
         self.allData = self.allData[shuffle_num, :, :, :]
         self.allLabel = self.allLabel[shuffle_num]
 
-        # test data
-        # self.test_tmp = scipy.io.loadmat(self.root + 'A0%dE.mat' % self.nSub)
-        # self.test_data = self.test_tmp['data']
-        # self.test_label = self.test_tmp['label']
-
-        self.test_tmp = scipy.io.loadmat(self.root + 'se00%d.mat' % self.nSub)
-        self.test_data = self.test_tmp['x']
-        self.test_label = self.test_tmp['y']
-
-        self.test_data = np.transpose(self.test_data, (2, 0, 1))
-        self.test_data = np.expand_dims(self.test_data, axis=1)
-        self.test_label = np.transpose(self.test_label)
+        # split the dataset
+        X_train, X_test, y_train, y_test = train_test_split(self.allData, self.allLabel, train_size=0.7,
+                                                                random_state=None, shuffle=True)
         
-        # smaller time span
-        # self.test_data = self.test_data.reshape((288*4, 1, 22, 250))
-        # self.test_label = np.repeat(self.test_label, 4, axis=0)
+        # save the (X_test, y_test) into .mat files for further use
+        
+        test_set = {
+            'X_test': X_test,
+            'y_test': y_test
+        }
 
-        self.testData = self.test_data
-        self.testLabel = self.test_label.squeeze()
+        scipy.io.savemat('./Datasets/lyh_dataset/test_set.mat', test_set)
+
 
         # standardize
         # target_mean = np.mean(self.allData)
@@ -184,9 +205,17 @@ class ExP():
         # print(self.testData.shape)
         # print(self.testLabel.shape)
         # print(self.testLabel)
-        return self.allData, self.allLabel, self.testData, self.testLabel
+        return X_train, y_train, X_test, y_test
 
     def train(self):
+
+        # some trackable history
+        train_acc_list = []
+        test_acc_list = []
+        train_loss_list = []
+        test_loss_list = []
+
+        n_track_epochs = self.n_epochs // 100 # track the loss & acc every n_track_epochs epochs.
 
         img, label, test_data, test_label = self.get_source_data()
 
@@ -271,6 +300,12 @@ class ExP():
                       '  Test loss: %.6f' % loss_test.detach().cpu().numpy(),
                       '  Train accuracy %.6f' % train_acc,
                       '  Test accuracy is %.6f' % acc)
+                
+                if (e + 1) % n_track_epochs == 0:
+                    train_acc_list.append(train_acc)
+                    test_acc_list.append(acc)
+                    train_loss_list.append(loss.detach().cpu().numpy())
+                    test_loss_list.append(loss_test.detach().cpu().numpy())
 
                 self.log_write.write(str(e) + "    " + str(acc) + "\n")
                 num = num + 1
@@ -280,15 +315,42 @@ class ExP():
                     Y_true = test_label
                     Y_pred = y_pred
 
-        dir_name = "./results/models"
+        dir_name = "Models"
         if not os.path.exists(dir_name):
             os.makedirs(dir_name)
-        torch.save(self.model.module.state_dict(), './results/models/model_sub%d.pth'%self.nSub)
+        torch.save(self.model.module.state_dict(), 'Models/lyh_dataset/model_sub%d.pth'%self.nSub)
         averAcc = averAcc / num
         print('The average accuracy is:', averAcc)
         print('The best accuracy is:', bestAcc)
         self.log_write.write('The average accuracy is: ' + str(averAcc) + "\n")
         self.log_write.write('The best accuracy is: ' + str(bestAcc) + "\n")
+
+        # draw the plot
+        if train_acc_list:
+            plt.figure()
+            x = [i for i in range(1, len(train_acc_list) + 1)]
+            plt.plot(x, train_acc_list, label="acc_train")
+            plt.plot(x, test_acc_list, label="acc_test")
+
+            plt.legend()
+
+            plt.xlabel("epoch")
+            plt.ylabel("accuracy")
+
+            plt.savefig(os.path.join(self.config['res_path'], "acc.png"))
+
+
+            plt.figure()
+            x = [i for i in range(1, len(train_loss_list) + 1)]
+            plt.plot(x, train_loss_list, label="loss_train")
+            plt.plot(x, test_loss_list, label="loss_test")
+
+            plt.legend()
+
+            plt.xlabel("epoch")
+            plt.ylabel("loss")
+
+            plt.savefig(os.path.join(self.config['res_path'], "loss.png"))
 
         return bestAcc, averAcc, Y_true, Y_pred
         # writer.close()

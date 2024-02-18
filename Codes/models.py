@@ -66,9 +66,9 @@ class PatchEmbedding(nn.Module):
         self.emb_size = emb_size
 
         self.shallownet = nn.Sequential(
-            nn.Conv2d(1, 40, (1, 25), (1, 1)), # shape: 1000 -> 976 (1000-25+1)
-            nn.Conv2d(40, 40, (22, 1), (1, 1)),
-            nn.BatchNorm2d(40),
+            nn.Conv2d(1, emb_size, (1, 25), (1, 1)), # shape: 1000 -> 976 (1000-25+1)
+            nn.Conv2d(emb_size, emb_size, (14, 1), (1, 1)),
+            nn.BatchNorm2d(emb_size),
             nn.ELU(),
             nn.AvgPool2d((1, 75), (1, 15)),  # shape: 976 -> 61 ((976-75)/15+1)
             nn.Dropout(0.5),

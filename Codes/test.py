@@ -1,4 +1,5 @@
-from conformer import PatchEmbedding, MultiHeadAttention, ExP
+# from models import PatchEmbedding, MultiHeadAttention
+from ExP import ExP
 import torch
 import scipy
 
