@@ -328,7 +328,7 @@ class ExP():
         # draw the plot
         if train_acc_list:
             plt.figure()
-            x = [i for i in range(1, len(train_acc_list) + 1)]
+            x = [i * n_track_epochs for i in range(1, len(train_acc_list) + 1)]
             plt.plot(x, train_acc_list, label="acc_train")
             plt.plot(x, test_acc_list, label="acc_test")
 
@@ -341,7 +341,7 @@ class ExP():
 
 
             plt.figure()
-            x = [i for i in range(1, len(train_loss_list) + 1)]
+            x = [i * n_track_epochs for i in range(1, len(train_loss_list) + 1)]
             plt.plot(x, train_loss_list, label="loss_train")
             plt.plot(x, test_loss_list, label="loss_test")
 
