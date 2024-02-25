@@ -154,9 +154,16 @@ class ExP():
         y_tot = []
 
         for i in range(4):
-            tmp = eeg_raw[i].reshape(15, 300, -1) # (15, 30_0000) => (15, 300, 1000)
-            tmp = tmp[:14, :, :] # filter the channels, only need the first 14 channels
-            X_raw = tmp.transpose((1, 0, 2)) # (14, 300, 1000) => (300, 14, 1000)
+            # XXX: fixed the bug that you cannot simply reshape the files
+            # tmp = eeg_raw[i].reshape(15, 300, -1) # (15, 30_0000) => (15, 300, 1000)
+            # goal: (15, 30_0000) => (15, 300, 1000)
+            trial_list = []
+            for idx in range(300):
+                trial_list.append(eeg_raw[i][:, idx * 1000:(idx + 1) * 1000]) # [1000:2000]
+            # now we have of a list of len 300, w/ each of shape (15, 1000)
+            tmp = np.stack(trial_list) # should give a shape of (300, 15, 1000)
+            X_raw = tmp[:, :14, :] # filter the channels, only need the first 14 channels
+            # (300, 14, 1000)
             y_raw = np.array([i for j in range(300)]) # (300,) value = label
             X_tot.append(X_raw)
             y_tot.append(y_raw)
